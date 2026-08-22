@@ -26,11 +26,9 @@ class VisionSystem:
         #
         # Example:
         #
-        # {
-        #     "CAM_01": 0,
-        #     "CAM_02": "video.mp4"
-        # }
-        # --------------------------------------------------------
+        #{
+        #     "CAM_01": 0
+        # }     --------------------------------------------------------
 
         self.cameras = {}
 
@@ -89,6 +87,7 @@ class VisionSystem:
     # PROCESS ONE FRAME
     # ============================================================
 
+
     def process_frame(self, frame, camera_id):
 
         results = self.model.track(
@@ -101,7 +100,6 @@ class VisionSystem:
         tracking_data = []
 
         result = results[0]
-
 
         # --------------------------------------------------------
         # Check if people were detected
@@ -121,7 +119,6 @@ class VisionSystem:
 
             keypoints = result.keypoints.xy
 
-
             # ----------------------------------------------------
             # Process every tracked person
             # ----------------------------------------------------
@@ -140,6 +137,19 @@ class VisionSystem:
                     )
                 )
 
+                # ------------------------------------------------
+                # Get participant details
+                # ------------------------------------------------
+
+                participant_data = None
+
+                if participant_id is not None:
+
+                    participant_data = (
+                        self.registry.get_participant_data(
+                            participant_id
+                        )
+                    )
 
                 # ------------------------------------------------
                 # Build structured tracking data
@@ -153,6 +163,18 @@ class VisionSystem:
 
                     "track_id": track_id,
 
+                    "role_no": (
+                        participant_data["role_no"]
+                        if participant_data is not None
+                        else None
+                    ),
+
+                    "bench_no": (
+                        participant_data["bench_no"]
+                        if participant_data is not None
+                        else None
+                    ),
+
                     "keypoints": (
                         keypoints[i]
                         .cpu()
@@ -160,18 +182,11 @@ class VisionSystem:
                     )
                 }
 
-
                 tracking_data.append(
                     person_data
                 )
 
-
         return results, tracking_data
-
-
-    # ============================================================
-    # RUN ONE CAMERA
-    # ============================================================
 
     def run_camera(self, camera_id):
 
@@ -210,23 +225,21 @@ class VisionSystem:
 
                 if person["participant_id"] is not None:
 
-                    print(
-                        person["participant_id"],
-                        "->",
-                        person["camera_id"],
-                        "+ Track",
-                        person["track_id"]
-                    )
+                print(
+                    person["participant_id"],
+                    "->",
+                    person["camera_id"],
+                    "+ Track",
+                    person["track_id"]
+                )
 
-                else:
-
-                    print(
-                        "UNREGISTERED ->",
-                        person["camera_id"],
-                        "+ Track",
-                        person["track_id"]
-                    )
-
+            else:
+                 print(
+                    "UNREGISTERED ->",
+                    person["camera_id"],
+                    "+ Track",
+                    person["track_id"]
+                )
 
             # ----------------------------------------------------
             # Display YOLO output
