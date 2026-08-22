@@ -1,3 +1,4 @@
+from seating_arrangement import get_student_id
 class PersonRegistry:
 
     def __init__(self):
@@ -42,9 +43,12 @@ class PersonRegistry:
 
         if participant_id is None:
 
-            participant_id = f"P{self.next_id:03d}"
+            if bench_no is not None:
+                participant_id = get_student_id(bench_no)
 
-            self.next_id += 1
+            if participant_id is None:
+                participant_id = f"P{self.next_id:03d}"
+                self.next_id += 1
 
         else:
 

@@ -52,7 +52,7 @@ for frame in frame_generator(source):
             if (
                 class_name =="cell phone"
                 and confidence >=0.30
-            )
+            ):
 
                 print(
                     "DETECTED:",

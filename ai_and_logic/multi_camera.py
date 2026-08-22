@@ -2,6 +2,7 @@ import cv2
 import queue
 import threading
 from ultralytics import YOLO
+from collections import deque
 
 from input import frame_generator
 from person_registry import PersonRegistry
@@ -30,6 +31,11 @@ class CameraWorker:
         self.inference_size = inference_size
         self.inference_queue = queue.Queue(maxsize=1)
         self.inference_thread = None
+        self.fps = 30
+        self.frame_buffer = deque(maxlen=self.fps * 5)
+        self.event_active = False
+        self.event_frames = []
+        self.track_bench_map = {}
 
     def run(self):
         print(f"\n[{self.camera_id}] MediaPipe & YOLO Worker started...")
@@ -40,25 +46,27 @@ class CameraWorker:
             daemon=True
         )
         self.inference_thread.start()
-
+        print("[DEBUG] FRAME RECEIVED")
         for frame in frame_generator(self.source):
-            if self.stopped:
-                break
+                if self.stopped:
+                    break
 
-            try:
-                self.inference_queue.put_nowait(frame.copy())
-            except queue.Full:
+                self.frame_buffer.append(frame.copy())
+
                 try:
-                    self.inference_queue.get_nowait()
-                    self.inference_queue.put_nowait(frame.copy())
-                except queue.Empty:
-                    pass
+                     self.inference_queue.put_nowait(frame.copy())
+                except queue.Full:
+                    try:
+                        self.inference_queue.get_nowait()
+                        self.inference_queue.put_nowait(frame.copy())
+                    except queue.Empty:
+                        pass
 
-            cv2.imshow(self.camera_id, frame)
+                cv2.imshow(self.camera_id, frame)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                self.stopped = True
-                break
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                 self.stopped = True
+                 break
 
         print(f"[{self.camera_id}] Worker stopped.")
 
@@ -89,26 +97,43 @@ class CameraWorker:
 
                 if result.boxes.id is not None:
                     track_ids = result.boxes.id.int().cpu().tolist()
+
+                    participants = []
+
                     for track_id in track_ids:
-                        participant_id = self.registry.get_participant(self.camera_id, track_id)
+                        if track_id not in self.track_bench_map:
+                            self.track_bench_map[track_id] = len(self.track_bench_map) + 1
+
+                        bench_no = self.track_bench_map[track_id]
+
+                        participant_id = self.registry.get_participant(
+                            self.camera_id,
+                            track_id
+                        )
 
                         if participant_id is None:
                             participant_id = self.registry.register(
                                 camera_id=self.camera_id,
-                                track_id=track_id
+                                track_id=track_id,
+                                bench_no=bench_no
                             )
 
-                        current_participant = participant_id
-                        break
+                        participants.append(participant_id)
+
+                    if participants:
+                        current_participant = participants[0]
 
             if frame_number % self.mediapipe_interval == 0:
-                detect_cheating_mediapipe(
+                event = detect_cheating_mediapipe(
                     frame,
                     participant_id=current_participant
                 )
 
+                if event is not None:
+                    print(f"[EVENT] {current_participant} -> {event}")
     def stop(self):
         self.stopped = True
+
 
 
 class MultiCameraSystem:
@@ -167,3 +192,8 @@ class MultiCameraSystem:
                 thread.join(timeout=2)
 
         cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    system = MultiCameraSystem()
+    system.add_camera("CAM_01", 0)
+    system.start()
