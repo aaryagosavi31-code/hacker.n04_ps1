@@ -31,7 +31,10 @@ class CameraWorker:
         self.inference_size = inference_size
         self.inference_queue = queue.Queue(maxsize=1)
         self.inference_thread = None
-        self.frame_buffer = deque(maxlen=150)
+        self.fps = 30
+        self.frame_buffer = deque(maxlen=self.fps * 5)
+        self.event_active = False
+        self.event_frames = []
         self.track_bench_map = {}
 
     def run(self):
@@ -43,7 +46,6 @@ class CameraWorker:
             daemon=True
         )
         self.inference_thread.start()
-
         for frame in frame_generator(self.source):
             if self.stopped:
                 break
@@ -93,6 +95,9 @@ class CameraWorker:
 
                 if result.boxes.id is not None:
                     track_ids = result.boxes.id.int().cpu().tolist()
+
+                    participants = []
+
                     for track_id in track_ids:
                         bench_no = self.track_bench_map.setdefault(
                             track_id,
@@ -107,17 +112,22 @@ class CameraWorker:
                                 bench_no=bench_no
                             )
 
-                        current_participant = participant_id
-                        break
+                        participants.append(participant_id)
+
+                    if participants:
+                        current_participant = participants[0]
 
             if frame_number % self.mediapipe_interval == 0:
-                detect_cheating_mediapipe(
+                event = detect_cheating_mediapipe(
                     frame,
                     participant_id=current_participant
                 )
 
+                if event is not None:
+                    print(f"[EVENT] {current_participant} -> {event}")
     def stop(self):
         self.stopped = True
+
 
 
 class MultiCameraSystem:
@@ -176,3 +186,8 @@ class MultiCameraSystem:
                 thread.join(timeout=2)
 
         cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    system = MultiCameraSystem()
+    system.add_camera("CAM_01", 0)
+    system.start()

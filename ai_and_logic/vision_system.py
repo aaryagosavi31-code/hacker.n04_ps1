@@ -243,7 +243,6 @@ class VisionSystem:
                         "+ Track",
                         person["track_id"]
                     )
-
             cv2.imshow(
                 camera_id,
                 frame
