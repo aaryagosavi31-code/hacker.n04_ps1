@@ -52,7 +52,7 @@ for frame in frame_generator(source):
             if (
                 class_name =="cell phone"
                 and confidence >=0.30
-            )
+            ):
 
                 print(
                     "DETECTED:",
@@ -61,15 +61,9 @@ for frame in frame_generator(source):
                     round(confidence, 2)
                 )
 
-    # --------------------------------------------------------
-    # SHOW DETECTIONS
-    # --------------------------------------------------------
-
-    annotated_frame = result.plot()
-
     cv2.imshow(
         "Object Detection",
-        annotated_frame
+        frame
     )
 
     if cv2.waitKey(1) & 0xFF == ord("q"):

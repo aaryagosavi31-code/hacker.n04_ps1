@@ -130,12 +130,16 @@ class VisionSystem:
                 # participant.
                 # ------------------------------------------------
 
-                participant_id = (
-                    self.registry.get_participant(
+                participant_id = self.registry.get_participant(
+                    camera_id,
+                    track_id
+                )
+
+                if participant_id is None:
+                    participant_id = self.registry.register(
                         camera_id,
                         track_id
                     )
-                )
 
                 # ------------------------------------------------
                 # Get participant details
@@ -225,34 +229,24 @@ class VisionSystem:
 
                 if person["participant_id"] is not None:
 
-                print(
-                    person["participant_id"],
-                    "->",
-                    person["camera_id"],
-                    "+ Track",
-                    person["track_id"]
-                )
-
-            else:
-                 print(
-                    "UNREGISTERED ->",
-                    person["camera_id"],
-                    "+ Track",
-                    person["track_id"]
-                )
-
-            # ----------------------------------------------------
-            # Display YOLO output
-            # ----------------------------------------------------
-
-            annotated_frame = (
-                results[0].plot()
-            )
-
+                    print(
+                        person["participant_id"],
+                        "->",
+                        person["camera_id"],
+                        "+ Track",
+                        person["track_id"]
+                    )
+                else:
+                    print(
+                        "UNREGISTERED ->",
+                        person["camera_id"],
+                        "+ Track",
+                        person["track_id"]
+                    )
 
             cv2.imshow(
                 camera_id,
-                annotated_frame
+                frame
             )
 
 

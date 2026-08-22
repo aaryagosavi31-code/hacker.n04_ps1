@@ -102,6 +102,10 @@ def process_cheating_event(participant_id, cheat_type_raw, confidence_score, fra
     PARTICIPANT_COOLDOWN_MAP[participant_id] = current_time
 
     cheat_type = categorize_cheating_type(cheat_type_raw)
+    print(
+        f"[CHEATING DETECTED] student={participant_id} "
+        f"type={cheat_type} confidence={confidence_score:.1f}%"
+    )
     timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
     sanitized_type = cheat_type.replace(' ', '_').replace('/', '').replace('\\', '')
     filename = f"{participant_id}_{sanitized_type}_{timestamp_str}.jpg"

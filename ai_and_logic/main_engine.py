@@ -1,11 +1,11 @@
-from vision_system import VisionSystem
+from multi_camera import MultiCameraSystem
 
 
 def main():
 
-    system = VisionSystem()
+    system = MultiCameraSystem()
 
-    print("=== DRISTI AI - Vision System ===")
+    print("=== DRISTI AI - Multi-Camera Cheating Detection ===")
     print("1. Run Webcam")
     print("2. Run Demo Video File")
 
@@ -36,11 +36,14 @@ def main():
 
     try:
 
-        system.run_camera("CAM_01")
+        system.start()
 
     except KeyboardInterrupt:
 
         print("\nStopping vision system...")
+
+    finally:
+        system.stop()
 
 
 if __name__ == "__main__":

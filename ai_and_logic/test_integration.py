@@ -98,15 +98,9 @@ for frame in frame_generator(source):
             person["track_id"]
         )
 
-    # --------------------------------------------------------
-    # Display YOLO output
-    # --------------------------------------------------------
-
-    annotated_frame = results[0].plot()
-
     cv2.imshow(
         "YOLO Tracking",
-        annotated_frame
+        frame
     )
 
     if cv2.waitKey(1) & 0xFF == ord("q"):

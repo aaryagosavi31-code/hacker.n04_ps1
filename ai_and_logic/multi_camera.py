@@ -1,6 +1,7 @@
 import cv2
 import queue
 import threading
+from collections import deque
 from ultralytics import YOLO
 
 from input import frame_generator
@@ -30,6 +31,8 @@ class CameraWorker:
         self.inference_size = inference_size
         self.inference_queue = queue.Queue(maxsize=1)
         self.inference_thread = None
+        self.frame_buffer = deque(maxlen=150)
+        self.track_bench_map = {}
 
     def run(self):
         print(f"\n[{self.camera_id}] MediaPipe & YOLO Worker started...")
@@ -45,6 +48,7 @@ class CameraWorker:
             if self.stopped:
                 break
 
+            self.frame_buffer.append(frame.copy())
             try:
                 self.inference_queue.put_nowait(frame.copy())
             except queue.Full:
@@ -90,12 +94,17 @@ class CameraWorker:
                 if result.boxes.id is not None:
                     track_ids = result.boxes.id.int().cpu().tolist()
                     for track_id in track_ids:
+                        bench_no = self.track_bench_map.setdefault(
+                            track_id,
+                            len(self.track_bench_map) + 1
+                        )
                         participant_id = self.registry.get_participant(self.camera_id, track_id)
 
                         if participant_id is None:
                             participant_id = self.registry.register(
                                 camera_id=self.camera_id,
-                                track_id=track_id
+                                track_id=track_id,
+                                bench_no=bench_no
                             )
 
                         current_participant = participant_id
