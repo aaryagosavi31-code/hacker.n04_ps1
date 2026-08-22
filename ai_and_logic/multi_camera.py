@@ -1,15 +1,12 @@
 import cv2
+import queue
 import threading
-import requests
-import os
-from datetime import datetime
 from ultralytics import YOLO
 
 from input import frame_generator
 from person_registry import PersonRegistry
-
-BACKEND_URL = "http://localhost:5000/api/incident"
-
+# Import the MediaPipe cheating detection function
+from cheat_detector import detect_cheating_mediapipe
 
 class CameraWorker:
 
@@ -18,105 +15,97 @@ class CameraWorker:
         camera_id,
         source,
         registry,
-        model_path="yolo11n-pose.pt"
+        model_path="yolo11n-pose.pt",
+        yolo_interval=2,
+        mediapipe_interval=3,
+        inference_size=416
     ):
         self.camera_id = camera_id
         self.source = source
         self.registry = registry
         self.model = YOLO(model_path)
         self.stopped = False
-
-    def send_cheat_alert(self, participant_id, cheat_type, confidence, frame):
-        """Saves a snapshot locally and posts incident data to PostgreSQL via Flask API."""
-        os.makedirs("../backend/static/snapshots", exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{participant_id}_{timestamp}.jpg"
-        file_path = os.path.join("../backend/static/snapshots", filename)
-        snapshot_url = f"/static/snapshots/{filename}"
-
-        cv2.imwrite(file_path, frame)
-
-        payload = {
-            "student_id": participant_id,
-            "cheat_type": cheat_type,
-            "confidence_score": float(confidence),
-            "snapshot_path": snapshot_url
-        }
-
-        try:
-            res = requests.post(BACKEND_URL, json=payload, timeout=2)
-            if res.status_code == 201:
-                print(f"\n[SUCCESS] Logged to DB for {participant_id}: {cheat_type}")
-        except Exception as e:
-            print(f"\n[ERROR] Backend connection failed: {e}")
+        self.yolo_interval = max(1, yolo_interval)
+        self.mediapipe_interval = max(1, mediapipe_interval)
+        self.inference_size = inference_size
+        self.inference_queue = queue.Queue(maxsize=1)
+        self.inference_thread = None
 
     def run(self):
-        print(f"\n[{self.camera_id}] Worker started")
-        print("-----------------------------------")
-        print("Press 'p' -> Simulate Mobile Phone Detection")
-        print("Press 'h' -> Simulate Head Turn / Looking Away")
-        print("Press 'x' -> Simulate Paper Passing")
-        print("Press 'q' -> Stop Worker")
-        print("-----------------------------------\n")
+        print(f"\n[{self.camera_id}] MediaPipe & YOLO Worker started...")
+
+        self.inference_thread = threading.Thread(
+            target=self._run_inference,
+            name=f"inference-{self.camera_id}",
+            daemon=True
+        )
+        self.inference_thread.start()
 
         for frame in frame_generator(self.source):
             if self.stopped:
                 break
 
-            results = self.model.track(
-                frame,
-                persist=True,
-                tracker="bytetrack.yaml",
-                verbose=False
-            )
+            try:
+                self.inference_queue.put_nowait(frame.copy())
+            except queue.Full:
+                try:
+                    self.inference_queue.get_nowait()
+                    self.inference_queue.put_nowait(frame.copy())
+                except queue.Empty:
+                    pass
 
-            result = results[0]
-            current_participants = []
+            cv2.imshow(self.camera_id, frame)
 
-            # Track detected people & assign P001, P002...
-            if result.boxes.id is not None and result.keypoints is not None:
-                track_ids = result.boxes.id.int().cpu().tolist()
-
-                for track_id in track_ids:
-                    participant_id = self.registry.get_participant(self.camera_id, track_id)
-
-                    # Auto-register new tracks to permanent IDs
-                    if participant_id is None:
-                        participant_id = self.registry.register(
-                            camera_id=self.camera_id,
-                            track_id=track_id
-                        )
-
-                    current_participants.append(participant_id)
-
-            annotated_frame = result.plot()
-            cv2.imshow(self.camera_id, annotated_frame)
-
-            # Keyboard Listener for Manual Testing
-            key = cv2.waitKey(1) & 0xFF
-
-            if key == ord('q'):
+            if cv2.waitKey(1) & 0xFF == ord('q'):
                 self.stopped = True
                 break
 
-            elif key in [ord('p'), ord('h'), ord('x')]:
-                # Pick the first tracked person or fallback to P001
-                target_id = current_participants[0] if current_participants else "P001"
+        print(f"[{self.camera_id}] Worker stopped.")
 
-                if key == ord('p'):
-                    cheat_type = "Unauthorised Material / Mobile Device"
-                    confidence = 92.5
-                elif key == ord('h'):
-                    cheat_type = "Head Turn / Looking Away"
-                    confidence = 88.0
-                elif key == ord('x'):
-                    cheat_type = "Paper Passing / Communication"
-                    confidence = 95.0
+    def _run_inference(self):
+        frame_number = 0
+        current_participant = "P001"
+        result = None
 
-                print(f"\n[KEY PRESS DETECTED] Triggering alert for: {target_id}")
-                self.send_cheat_alert(target_id, cheat_type, confidence, annotated_frame)
+        while not self.stopped:
+            try:
+                frame = self.inference_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
 
-        print(f"[{self.camera_id}] Worker stopped")
+            frame_number += 1
+
+            if result is None or frame_number % self.yolo_interval == 0:
+                results = self.model.track(
+                    frame,
+                    persist=True,
+                    tracker="bytetrack.yaml",
+                    imgsz=self.inference_size,
+                    max_det=4,
+                    verbose=False
+                )
+
+                result = results[0]
+
+                if result.boxes.id is not None:
+                    track_ids = result.boxes.id.int().cpu().tolist()
+                    for track_id in track_ids:
+                        participant_id = self.registry.get_participant(self.camera_id, track_id)
+
+                        if participant_id is None:
+                            participant_id = self.registry.register(
+                                camera_id=self.camera_id,
+                                track_id=track_id
+                            )
+
+                        current_participant = participant_id
+                        break
+
+            if frame_number % self.mediapipe_interval == 0:
+                detect_cheating_mediapipe(
+                    frame,
+                    participant_id=current_participant
+                )
 
     def stop(self):
         self.stopped = True
@@ -126,30 +115,55 @@ class MultiCameraSystem:
 
     def __init__(self):
         self.registry = PersonRegistry()
-        self.cameras = {}
-        self.threads = []
+        self.workers = {}
+        self.threads = {}
 
-    def add_camera(self, camera_id, source):
-        if camera_id in self.cameras:
-            return False
-        worker = CameraWorker(
+    def add_camera(self, camera_id, source, model_path="yolo11n-pose.pt"):
+        if camera_id in self.workers:
+            raise ValueError(f"Camera {camera_id} is already registered")
+
+        self.workers[camera_id] = CameraWorker(
             camera_id=camera_id,
             source=source,
-            registry=self.registry
+            registry=self.registry,
+            model_path=model_path
         )
-        self.cameras[camera_id] = worker
-        return True
+
+    def register_participant(
+        self,
+        participant_id,
+        camera_id,
+        track_id,
+        role_no=None,
+        bench_no=None
+    ):
+        return self.registry.register(
+            camera_id=camera_id,
+            track_id=track_id,
+            participant_id=participant_id,
+            role_no=role_no,
+            bench_no=bench_no
+        )
 
     def start(self):
-        for camera_id, worker in self.cameras.items():
-            thread = threading.Thread(target=worker.run, daemon=True)
-            self.threads.append(thread)
+        for camera_id, worker in self.workers.items():
+            thread = threading.Thread(
+                target=worker.run,
+                name=f"camera-{camera_id}",
+                daemon=True
+            )
+            self.threads[camera_id] = thread
             thread.start()
 
-        for thread in self.threads:
+        for thread in self.threads.values():
             thread.join()
 
     def stop(self):
-        for worker in self.cameras.values():
+        for worker in self.workers.values():
             worker.stop()
+
+        for thread in self.threads.values():
+            if thread.is_alive():
+                thread.join(timeout=2)
+
         cv2.destroyAllWindows()
