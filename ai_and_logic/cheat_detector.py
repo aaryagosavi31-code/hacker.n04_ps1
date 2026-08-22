@@ -6,6 +6,35 @@ import mediapipe as mp
 from urllib.request import urlretrieve
 from datetime import datetime
 
+from ultralytics import YOLO
+
+class ExamMonitoringSystem:
+    def __init__(self, chit_model_path="chit_detector.pt", pose_model_path="yolo11n-pose.pt"):
+        # Load your custom chit/paper detector
+        self.chit_model = YOLO(chit_model_path)
+        
+        # Load pose estimation or existing detection model
+        self.pose_model = YOLO(pose_model_path)
+        
+        # Load your LSTM classifier (PyTorch or custom loader)
+        # self.lstm_model = torch.load("cheating_lstm.pt")
+
+    def process_frame(self, frame):
+        # 1. Run chit detection (using imgsz=640 for small objects)
+        chit_results = self.chit_model(frame, imgsz=640, conf=0.4)[0]
+        
+        # 2. Extract bounding boxes for detected chits
+        for box in chit_results.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+            confidence = box.conf[0].item()
+            cls = int(box.cls[0].item())
+            
+            # Draw or record detected cheating material
+            print(f"Detected object class {cls} with confidence {confidence:.2f}")
+
+        # 3. Pass frame/keypoints down to your existing pose & LSTM logic...
+        return chit_results
+
 # MediaPipe 0.10.35 removed the legacy solutions API. Keep both paths so the
 # detector works with older environments and current installations.
 try:
