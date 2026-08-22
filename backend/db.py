@@ -38,3 +38,26 @@ def save_to_db(student_id, cheat_type, confidence_score, snapshot_path):
     finally:
         if conn:
             conn.close()
+
+
+def get_recent_incidents(limit=100):
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        query = """
+            SELECT incident_id, timestamp, student_id, cheat_type,
+                   confidence_score, audio_flag, snapshot_path
+            FROM cheating_incidents
+            ORDER BY timestamp DESC
+            LIMIT %s;
+        """
+        with conn.cursor() as cur:
+            cur.execute(query, (limit,))
+            columns = [description[0] for description in cur.description]
+            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    except Exception as e:
+        print(f"[DB ERROR] Could not read incidents: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()

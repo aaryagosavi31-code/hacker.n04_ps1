@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
-from db import save_to_db
+from db import save_to_db, get_recent_incidents
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
@@ -41,6 +41,24 @@ def handle_incident():
     # Broadcast real-time update to React frontend
     socketio.emit('new_cheating_alert', payload)
     return jsonify({'status': 'success', 'data': payload}), 201
+
+
+@app.route('/api/incidents', methods=['GET'])
+def list_incidents():
+    try:
+        limit = min(int(request.args.get('limit', 100)), 500)
+    except ValueError:
+        limit = 100
+
+    incidents = get_recent_incidents(limit)
+    if incidents is None:
+        return jsonify({'status': 'error', 'message': 'Could not read incident logs'}), 500
+
+    for incident in incidents:
+        if incident.get('timestamp') is not None:
+            incident['timestamp'] = incident['timestamp'].isoformat(sep=' ')
+
+    return jsonify({'status': 'success', 'data': incidents}), 200
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
