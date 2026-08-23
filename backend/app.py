@@ -62,3 +62,31 @@ def list_incidents():
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+   
+   
+@app.route('/api/process-video', methods=['POST'])
+def process_video_endpoint():
+  # 1. Retrieve the file and form data from the request object first
+  if 'video' not in request.files:
+    return jsonify({'status': 'error', 'message': 'No video file provided'}), 400
+
+  video_file = request.files['video']
+  student_id = request.form.get('student_id', 'Unknown_Student')
+
+  # 2. Now 'video_file' and 'student_id' are defined and ready to use
+  upload_path = os.path.join('uploads', video_file.filename)
+  os.makedirs('uploads', exist_ok=True)
+  video_file.save(upload_path)
+
+  # Example save to database call
+  sample_cheat = 'Unauthorized Object (Phone)'
+  sample_confidence = 88.5
+  incident_id = save_to_db(
+      student_id, sample_cheat, sample_confidence, 'snapshot_sample.jpg'
+  )
+
+  return jsonify({
+      'status': 'success',
+      'message': 'Video processed successfully',
+      'incident_id': incident_id,
+  })
