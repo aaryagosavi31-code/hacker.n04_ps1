@@ -6,6 +6,7 @@ from ultralytics import YOLO
 
 from input import frame_generator
 from person_registry import PersonRegistry
+from video_recorder import EvidenceVideoRecorder
 # Import the MediaPipe cheating detection function
 from cheat_detector import detect_cheating_mediapipe
 
@@ -33,6 +34,10 @@ class CameraWorker:
         self.inference_thread = None
         self.fps = 30
         self.frame_buffer = deque(maxlen=self.fps * 5)
+        self.video_recorder = EvidenceVideoRecorder(
+            self.fps,
+            rolling_buffer=self.frame_buffer
+        )
         self.event_active = False
         self.event_frames = []
         self.track_bench_map = {}
@@ -50,7 +55,7 @@ class CameraWorker:
             if self.stopped:
                 break
 
-            self.frame_buffer.append(frame.copy())
+            self.video_recorder.add_frame(frame)
             try:
                 self.inference_queue.put_nowait(frame.copy())
             except queue.Full:
@@ -125,8 +130,14 @@ class CameraWorker:
 
                 if event is not None:
                     print(f"[EVENT] {current_participant} -> {event}")
+                    self.video_recorder.trigger(
+                        participant_id=current_participant,
+                        event_type=event,
+                        frame=frame
+                    )
     def stop(self):
         self.stopped = True
+        self.video_recorder.stop()
 
 
 

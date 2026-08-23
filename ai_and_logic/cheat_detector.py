@@ -191,7 +191,8 @@ def detect_cheating_mediapipe(frame, participant_id="P001"):
 
         # Detect multiple people in frame
         if len(detected_faces) > 1:
-            event = process_cheating_event(participant_id, 'multiple_faces', 95.0, frame)
+            process_cheating_event(participant_id, 'multiple_faces', 95.0, frame)
+            event = 'multiple_faces'
             cv2.putText(
                 frame,
                 "WARNING: MULTIPLE FACES",
@@ -219,7 +220,8 @@ def detect_cheating_mediapipe(frame, participant_id="P001"):
                         f"\n[FLAGGED] Head turn detected for {participant_id}! "
                         f"Ratio: {round(yaw_ratio, 2)}"
                     )
-                    event = process_cheating_event(participant_id, 'head_turn', 88.0, frame)
+                    process_cheating_event(participant_id, 'head_turn', 88.0, frame)
+                    event = 'head_turn'
                     cv2.putText(
                         frame,
                         f"ALERT: HEAD TURN DETECTED ({participant_id})",
@@ -233,7 +235,8 @@ def detect_cheating_mediapipe(frame, participant_id="P001"):
     else:
         MISSING_FRAME_COUNTERS[participant_id] = MISSING_FRAME_COUNTERS.get(participant_id, 0) + 1
         if MISSING_FRAME_COUNTERS[participant_id] > 30:
-            event = process_cheating_event(participant_id, 'no_face', 90.0, frame)
+            process_cheating_event(participant_id, 'no_face', 90.0, frame)
+            event = 'no_face'
             cv2.putText(
                 frame,
                 f"ALERT: CANDIDATE MISSING ({participant_id})",
@@ -265,7 +268,8 @@ def detect_cheating_mediapipe(frame, participant_id="P001"):
         # Trigger if either hand/wrist goes up near face level
         if (left_wrist.y < nose_y + 0.1 and left_wrist.visibility > 0.5) or \
            (right_wrist.y < nose_y + 0.1 and right_wrist.visibility > 0.5):
-            event = process_cheating_event(participant_id, 'phone', 92.0, frame)
+            process_cheating_event(participant_id, 'phone', 92.0, frame)
+            event = 'phone'
             cv2.putText(
                 frame,
                 f"ALERT: PHONE / HAND NEAR FACE ({participant_id})",
@@ -286,7 +290,8 @@ def detect_cheating_mediapipe(frame, participant_id="P001"):
                 right_wrist.visibility > 0.5 and right_wrist.x < left_shoulder.x
             )
             if hand_reaching_across:
-                event = process_cheating_event(participant_id, 'paper_pass', 94.0, frame)
+                process_cheating_event(participant_id, 'paper_pass', 94.0, frame)
+                event = 'paper_pass'
                 cv2.putText(
                     frame,
                     f"ALERT: PAPER PASSING / HAND REACH ({participant_id})",
