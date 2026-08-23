@@ -1,4 +1,5 @@
 import psycopg2
+import traceback
 from datetime import datetime
 
 DB_CONFIG = {
@@ -57,6 +58,61 @@ def get_recent_incidents(limit=100):
             return [dict(zip(columns, row)) for row in cur.fetchall()]
     except Exception as e:
         print(f"[DB ERROR] Could not read incidents: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def save_recording_to_db(student_id, started_at, ended_at, video_path, duration_seconds):
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        query = """
+            INSERT INTO examin_recordings
+                (student_id, started_at, ended_at, video_path, duration_seconds)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING recording_id;
+        """
+        with conn.cursor() as cur:
+            cur.execute(query, (
+                student_id,
+                started_at,
+                ended_at,
+                video_path,
+                duration_seconds
+            ))
+            recording_id = cur.fetchone()[0]
+        conn.commit()
+        return recording_id
+    except Exception as error:
+        print(f"[VIDEO ERROR] PostgreSQL recording insert failed: {error}")
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_recent_recordings(limit=100):
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        query = """
+            SELECT recording_id, student_id, started_at, ended_at,
+                   video_path, duration_seconds
+            FROM examin_recordings
+            ORDER BY recording_id DESC
+            LIMIT %s;
+        """
+        with conn.cursor() as cur:
+            cur.execute(query, (limit,))
+            columns = [description[0] for description in cur.description]
+            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    except Exception as error:
+        print(f"[VIDEO ERROR] Could not read recordings: {error}")
         return None
     finally:
         if conn:

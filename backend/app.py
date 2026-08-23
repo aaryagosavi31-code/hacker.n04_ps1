@@ -3,16 +3,21 @@ from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
-from db import save_to_db, get_recent_incidents
+from db import save_to_db, get_recent_incidents, get_recent_recordings
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Serve snapshots to the React frontend
 @app.route('/static/snapshots/<filename>')
 def serve_snapshot(filename):
     return send_from_directory('static/snapshots', filename)
+
+
+@app.route('/static/recordings/<filename>')
+def serve_recording(filename):
+    return send_from_directory('static/recordings', filename)
 
 # Endpoint called by ai_and_logic when a cheating incident occurs
 @app.route('/api/incident', methods=['POST'])
@@ -60,10 +65,25 @@ def list_incidents():
 
     return jsonify({'status': 'success', 'data': incidents}), 200
 
-if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
-   
-   
+
+@app.route('/api/recordings', methods=['GET'])
+def list_recordings():
+    try:
+        limit = min(int(request.args.get('limit', 100)), 500)
+    except ValueError:
+        limit = 100
+
+    recordings = get_recent_recordings(limit)
+    if recordings is None:
+        return jsonify({'status': 'error', 'message': 'Could not read recordings'}), 500
+
+    for recording in recordings:
+        for field in ('started_at', 'ended_at'):
+            if recording.get(field) is not None:
+                recording[field] = recording[field].isoformat(sep=' ')
+
+    return jsonify({'status': 'success', 'data': recordings}), 200
+
 @app.route('/api/process-video', methods=['POST'])
 def process_video_endpoint():
   # 1. Retrieve the file and form data from the request object first
@@ -90,3 +110,13 @@ def process_video_endpoint():
       'message': 'Video processed successfully',
       'incident_id': incident_id,
   })
+
+
+if __name__ == '__main__':
+    socketio.run(
+        app,
+        host='0.0.0.0',
+        port=5000,
+        debug=False,
+        use_reloader=False
+    )
